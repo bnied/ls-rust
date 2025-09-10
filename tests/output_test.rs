@@ -1,5 +1,4 @@
 /// Integration tests for output format validation
-
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs::{self, File};

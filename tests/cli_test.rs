@@ -1,5 +1,4 @@
 /// Integration tests for the ls-rust CLI functionality
-
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs::{self, File};
