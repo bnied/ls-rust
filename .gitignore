@@ -15,3 +15,6 @@ Cargo.lock
 
 # Ignore IntelliJ's folder
 .idea
+
+# Ignore Bacon files
+.bacon*
