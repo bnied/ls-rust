@@ -9,7 +9,7 @@ use std::io;
 use std::path::Path;
 
 /// Reads a directory and collects file information.
-/// Filters hidden files based on the show_all flag.
+/// Filters hidden files based on the `show_all` flag.
 /// Continues processing even if some entries fail to read.
 pub fn collect_entries(dir: &Path, show_all: bool) -> io::Result<Vec<FileInfo>> {
     let mut entries = vec![];

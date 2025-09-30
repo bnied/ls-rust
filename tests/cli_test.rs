@@ -162,27 +162,71 @@ fn test_list_single_file() {
 fn test_human_readable_sizes() {
     let temp_dir = TempDir::new().unwrap();
     let file_path = temp_dir.path().join("test.txt");
-    
+
     // Create a file with some content
     let content = "a".repeat(5000); // 5KB of 'a's
     fs::write(&file_path, content).unwrap();
-    
+
     // Test with -lh
     let mut cmd = Command::cargo_bin("ls-rust").unwrap();
     cmd.arg("-lh").arg(temp_dir.path());
-    
+
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("test.txt"))
         // Should show human-readable size (e.g., "4.9K")
         .stdout(predicate::str::is_match(r"\d+\.\d+K|\d+K").unwrap());
-    
+
     // Test with -sh
     let mut cmd = Command::cargo_bin("ls-rust").unwrap();
     cmd.arg("-sh").arg(temp_dir.path());
-    
+
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("test.txt"))
         .stdout(predicate::str::is_match(r"\d+\.\d+K|\d+K").unwrap());
+}
+
+/// Test sort by size (-S flag)
+#[test]
+fn test_sort_by_size() {
+    let temp_dir = TempDir::new().unwrap();
+    let small_file = temp_dir.path().join("small.txt");
+    let large_file = temp_dir.path().join("large.txt");
+
+    fs::write(&small_file, "a").unwrap(); // 1 byte
+    fs::write(&large_file, "a".repeat(1000)).unwrap(); // 1000 bytes
+
+    let mut cmd = Command::cargo_bin("ls-rust").unwrap();
+    cmd.arg("-S").arg("-1").arg(temp_dir.path());
+
+    let output = cmd.output().unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    // large.txt should appear before small.txt when sorted by size
+    let large_pos = stdout.find("large.txt").unwrap();
+    let small_pos = stdout.find("small.txt").unwrap();
+    assert!(large_pos < small_pos, "Files should be sorted by size (largest first)");
+}
+
+/// Test group directories first (--group-directories-first flag)
+#[test]
+fn test_group_directories_first() {
+    let temp_dir = TempDir::new().unwrap();
+    let file = temp_dir.path().join("aaa_file.txt");
+    let dir = temp_dir.path().join("zzz_dir");
+
+    File::create(&file).unwrap();
+    fs::create_dir(&dir).unwrap();
+
+    let mut cmd = Command::cargo_bin("ls-rust").unwrap();
+    cmd.arg("--group-directories-first").arg("-1").arg(temp_dir.path());
+
+    let output = cmd.output().unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    // zzz_dir should appear before aaa_file.txt despite alphabetical ordering
+    let dir_pos = stdout.find("zzz_dir").unwrap();
+    let file_pos = stdout.find("aaa_file.txt").unwrap();
+    assert!(dir_pos < file_pos, "Directories should be grouped before files");
 }

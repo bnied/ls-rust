@@ -7,9 +7,48 @@ use crate::file_info::FileInfo;
 use crate::utils::{
     colorize_name, format_block_size, format_permissions, format_size_human, format_time,
 };
+use std::sync::LazyLock;
+use std::collections::HashMap;
 use std::fmt;
+use std::sync::Mutex;
 use std::time::SystemTime;
 use users::{get_group_by_gid, get_user_by_uid};
+
+/// Cache for user ID to username lookups
+static USER_CACHE: LazyLock<Mutex<HashMap<u32, String>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Cache for group ID to group name lookups
+static GROUP_CACHE: LazyLock<Mutex<HashMap<u32, String>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Gets username for a UID, using cache to avoid repeated lookups
+fn get_username(uid: u32) -> String {
+    let mut cache = USER_CACHE.lock().unwrap();
+    cache
+        .entry(uid)
+        .or_insert_with(|| {
+            get_user_by_uid(uid).map_or_else(
+                || uid.to_string(),
+                |u| u.name().to_string_lossy().to_string(),
+            )
+        })
+        .clone()
+}
+
+/// Gets group name for a GID, using cache to avoid repeated lookups
+fn get_groupname(gid: u32) -> String {
+    let mut cache = GROUP_CACHE.lock().unwrap();
+    cache
+        .entry(gid)
+        .or_insert_with(|| {
+            get_group_by_gid(gid).map_or_else(
+                || gid.to_string(),
+                |g| g.name().to_string_lossy().to_string(),
+            )
+        })
+        .clone()
+}
 
 /// Display format for file entries
 #[derive(Debug, PartialEq, Clone)]
@@ -19,7 +58,7 @@ pub enum Format {
     Long,     // Display full details (permissions, owner, size, date, name)
 }
 
-/// Formatter for displaying FileInfo in various formats.
+/// Formatter for displaying `FileInfo` in various formats.
 /// Implements Display trait for easy rendering and testing.
 pub struct FileInfoFormatter<'a> {
     pub file_info: &'a FileInfo, // Reference to the file information to display
@@ -28,7 +67,7 @@ pub struct FileInfoFormatter<'a> {
 }
 
 impl fmt::Display for FileInfoFormatter<'_> {
-    /// Formats the FileInfo according to the selected format.
+    /// Formats the `FileInfo` according to the selected format.
     /// This allows using the formatter with println!, format!, etc.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.format {
@@ -61,14 +100,8 @@ impl FileInfoFormatter<'_> {
     fn format_long(&self) -> String {
         let permissions = format_permissions(&self.file_info.metadata);
         let nlink = self.file_info.nlink();
-        let owner = get_user_by_uid(self.file_info.uid()).map_or_else(
-            || self.file_info.uid().to_string(),
-            |u| u.name().to_string_lossy().to_string(),
-        );
-        let group = get_group_by_gid(self.file_info.gid()).map_or_else(
-            || self.file_info.gid().to_string(),
-            |g| g.name().to_string_lossy().to_string(),
-        );
+        let owner = get_username(self.file_info.uid());
+        let group = get_groupname(self.file_info.gid());
         let size = if self.human_readable {
             format_size_human(self.file_info.size())
         } else {
@@ -78,9 +111,16 @@ impl FileInfoFormatter<'_> {
 
         let mut display_name = colorize_name(&self.file_info.file_name, &self.file_info.metadata);
 
-        // If it's a symlink, show the target
-        if let Some(target) = self.file_info.symlink_target() {
-            display_name = format!("{} -> {}", display_name, target.display()).into();
+        // If it's a symlink, show the target (or error if broken)
+        if let Some(target_result) = self.file_info.symlink_target() {
+            match target_result {
+                Ok(target) => {
+                    display_name = format!("{} -> {}", display_name, target.display()).into();
+                }
+                Err(err) => {
+                    display_name = format!("{display_name} -> [{err}]").into();
+                }
+            }
         }
 
         format!("{permissions} {nlink:>3} {owner} {group} {size:>8} {modified} {display_name}")

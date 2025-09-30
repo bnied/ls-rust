@@ -1,6 +1,6 @@
 //! File information structure and methods.
 //!
-//! This module provides the FileInfo struct which encapsulates file metadata
+//! This module provides the `FileInfo` struct which encapsulates file metadata
 //! and provides convenient accessor methods for file properties.
 
 use std::fs::{self, DirEntry, Metadata};
@@ -17,8 +17,8 @@ pub struct FileInfo {
 }
 
 impl FileInfo {
-    /// Creates a FileInfo from a DirEntry (used when iterating directory contents)
-    /// Note: Takes DirEntry by value because its methods consume self
+    /// Creates a `FileInfo` from a `DirEntry` (used when iterating directory contents)
+    /// Note: Takes `DirEntry` by value because its methods consume self
     #[allow(clippy::needless_pass_by_value)]
     pub fn from_entry(entry: DirEntry) -> std::io::Result<Self> {
         let metadata = entry.metadata()?;
@@ -31,7 +31,7 @@ impl FileInfo {
         })
     }
 
-    /// Creates a FileInfo from a Path (used for single file listings)
+    /// Creates a `FileInfo` from a `Path` (used for single file listings)
     pub fn from_path(path: &Path) -> std::io::Result<Self> {
         // Use symlink_metadata to detect symlinks properly
         let metadata = fs::symlink_metadata(path)?;
@@ -76,9 +76,15 @@ impl FileInfo {
     }
 
     /// Get symlink target if this is a symlink
-    pub fn symlink_target(&self) -> Option<PathBuf> {
+    /// Returns `Some(Ok(target))` for valid symlinks,
+    /// `Some(Err(error))` for broken symlinks,
+    /// and `None` for non-symlinks
+    pub fn symlink_target(&self) -> Option<Result<PathBuf, String>> {
         if self.metadata.is_symlink() {
-            fs::read_link(&self.path).ok()
+            Some(
+                fs::read_link(&self.path)
+                    .map_err(|e| format!("broken symlink: {e}")),
+            )
         } else {
             None
         }

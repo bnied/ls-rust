@@ -38,8 +38,17 @@ pub struct Args {
     #[arg(short = 't', long, help = "Sort by modification time, newest first")]
     pub time: bool,
 
+    #[arg(short = 'S', long, help = "Sort by file size, largest first")]
+    pub size_sort: bool,
+
     #[arg(short = 'r', long, help = "Reverse order while sorting")]
     pub reverse: bool,
+
+    #[arg(
+        long = "group-directories-first",
+        help = "List directories before files"
+    )]
+    pub group_directories_first: bool,
 
     #[arg(short = '1', long = "one", help = "List one file per line")]
     pub one: bool,
@@ -104,7 +113,12 @@ impl Args {
 
             // Collect and sort entries
             let mut entries = collect_entries(path, self.all)?;
-            let sort_config = SortConfig::new(self.time, self.reverse);
+            let sort_config = SortConfig::new(
+                self.time,
+                self.size_sort,
+                self.reverse,
+                self.group_directories_first,
+            );
             sort_entries(&mut entries, &sort_config);
 
             // Display total blocks for long format
@@ -120,7 +134,7 @@ impl Args {
 
             // Handle recursive listing
             if self.recursive {
-                self.list_subdirectories(&entries, depth)?;
+                self.list_subdirectories(&entries, depth);
             }
         }
 
@@ -128,7 +142,7 @@ impl Args {
     }
 
     /// Recursively lists subdirectories
-    fn list_subdirectories(&self, entries: &[FileInfo], depth: usize) -> io::Result<()> {
+    fn list_subdirectories(&self, entries: &[FileInfo], depth: usize) {
         let mut dirs = get_subdirectories(entries);
 
         // Sort directories for consistent output
@@ -140,12 +154,10 @@ impl Args {
                 eprintln!("ls: {}: {}", dir.path.display(), e);
             }
         }
-
-        Ok(())
     }
 
     /// Displays a single file using the appropriate format.
-    /// Creates a FileInfoFormatter with the correct format and renders it.
+    /// Creates a `FileInfoFormatter` with the correct format and renders it.
     fn display_file(&self, file_info: &FileInfo) {
         let format = self.get_format();
         let formatter = FileInfoFormatter {
